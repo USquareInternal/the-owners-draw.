@@ -1234,14 +1234,15 @@ input:focus {
   grid-area: qr;
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 1rem;
   text-align: left;
+  padding: 0.85rem 1rem;
 }
 
 .qrCode {
-  width: 88px;
-  height: 88px;
-  border-radius: 8px;
+  width: 148px;
+  height: 148px;
+  border-radius: 10px;
   background: #fff;
   flex-shrink: 0;
 }

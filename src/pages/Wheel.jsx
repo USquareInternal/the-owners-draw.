@@ -543,7 +543,7 @@ export default function Wheel() {
     );
   };
 
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JOIN_URL)}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&data=${encodeURIComponent(JOIN_URL)}`;
 
   return (
     <div className="page wheelHost">
@@ -601,7 +601,7 @@ export default function Wheel() {
         <header className="hostHeader">
           <img className="hostLogo" src="/logo.png" alt="Nexora" />
           <h1>
-            The Owners&apos; <span>Draw</span>
+            The Member <span>Draw</span>
           </h1>
           <p className="hostLive">
             <span className="liveDot" /> Live · One winner takes the pool

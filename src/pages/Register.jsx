@@ -336,9 +336,8 @@ export default function Register() {
           <div className="ownersLogoBadge">
             <img className="ownersLogo" src="/logo.png" alt="Nexora" />
           </div>
-          <h1 className="ownersTitle">The Owners&apos; Draw</h1>
+          <h1 className="ownersTitle">The Member Draw</h1>
           <p className="ownersSubtitle">One winner takes the pool</p>
-          <p className="ownersPrize">$1200</p>
           <p className="ownersGrow">grows with the room</p>
         </header>
 
