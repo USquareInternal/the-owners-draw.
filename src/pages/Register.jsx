@@ -176,11 +176,24 @@ async function fetchCountry() {
   return "Unknown";
 }
 
-async function emailAlreadyRegistered(emailKey, cleanEmail) {
-  // New entries use lowercase email as document id
-  const byId = await getDoc(doc(db, "participants", emailKey));
+function normalizeUserId(value) {
+  return value.trim().toLowerCase();
+}
+
+async function userIdAlreadyRegistered(userIdKey) {
+  // Document id is the normalized user ID (cross-device uniqueness)
+  const byId = await getDoc(doc(db, "participants", userIdKey));
   if (byId.exists()) return true;
 
+  const byKey = query(
+    collection(db, "participants"),
+    where("userIdKey", "==", userIdKey),
+    limit(1)
+  );
+  return !(await getDocs(byKey)).empty;
+}
+
+async function emailAlreadyRegistered(emailKey, cleanEmail) {
   const byKey = query(
     collection(db, "participants"),
     where("emailKey", "==", emailKey),
@@ -188,7 +201,6 @@ async function emailAlreadyRegistered(emailKey, cleanEmail) {
   );
   if (!(await getDocs(byKey)).empty) return true;
 
-  // Fallback for older docs that only stored `email`
   const byExact = query(
     collection(db, "participants"),
     where("email", "==", cleanEmail),
@@ -205,12 +217,15 @@ async function emailAlreadyRegistered(emailKey, cleanEmail) {
     if (!(await getDocs(byLower)).empty) return true;
   }
 
-  return false;
+  // Legacy docs used email as document id
+  const byId = await getDoc(doc(db, "participants", emailKey));
+  return byId.exists();
 }
 
 export default function Register() {
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
+  const [userId, setUserId] = useState("");
   const [leaderName, setLeaderName] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -218,18 +233,58 @@ export default function Register() {
   const countryRef = useRef("");
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(CLAIM_KEY);
-      if (saved) {
+    let active = true;
+
+    (async () => {
+      try {
+        const saved = localStorage.getItem(CLAIM_KEY);
+        if (!saved) return;
+
         const data = JSON.parse(saved);
+        if (!active) return;
+
         if (data?.email) setEmail(data.email);
         if (data?.nickname) setNickname(data.nickname);
+        if (data?.userId) setUserId(data.userId);
         if (data?.leaderName) setLeaderName(data.leaderName);
-        setSubmitted(true);
+
+        // Only keep the form locked if the entry still exists in Firebase
+        let stillRegistered = false;
+        if (data?.userId) {
+          stillRegistered = await userIdAlreadyRegistered(
+            normalizeUserId(data.userId)
+          );
+        }
+        if (!stillRegistered && data?.email) {
+          const cleanEmail = String(data.email).trim();
+          stillRegistered = await emailAlreadyRegistered(
+            cleanEmail.toLowerCase(),
+            cleanEmail
+          );
+        }
+
+        if (!active) return;
+
+        if (stillRegistered) {
+          setSubmitted(true);
+        } else {
+          localStorage.removeItem(CLAIM_KEY);
+          setSubmitted(false);
+        }
+      } catch {
+        // If we can't verify, unlock so an empty/reset DB can accept entries
+        try {
+          localStorage.removeItem(CLAIM_KEY);
+        } catch {
+          /* ignore */
+        }
+        if (active) setSubmitted(false);
       }
-    } catch {
-      /* ignore */
-    }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Prefetch so submit doesn't wait (and so country is ready)
@@ -243,13 +298,14 @@ export default function Register() {
     };
   }, []);
 
-  const persistClaim = (cleanName, cleanEmail, cleanLeader) => {
+  const persistClaim = (cleanName, cleanEmail, cleanUserId, cleanLeader) => {
     try {
       localStorage.setItem(
         CLAIM_KEY,
         JSON.stringify({
           email: cleanEmail,
           nickname: cleanName,
+          userId: cleanUserId,
           leaderName: cleanLeader,
         })
       );
@@ -263,6 +319,7 @@ export default function Register() {
     if (
       !nickname.trim() ||
       !email.trim() ||
+      !userId.trim() ||
       !leaderName.trim() ||
       loading ||
       submitted
@@ -272,17 +329,26 @@ export default function Register() {
 
     const cleanName = nickname.trim();
     const cleanEmail = email.trim();
+    const cleanUserId = userId.trim();
     const cleanLeader = leaderName.trim();
     const emailKey = cleanEmail.toLowerCase();
+    const userIdKey = normalizeUserId(cleanUserId);
+
+    if (!userIdKey) {
+      setError("Please enter a valid user ID.");
+      return;
+    }
 
     setLoading(true);
     setError("");
     try {
-      const exists = await emailAlreadyRegistered(emailKey, cleanEmail);
-      if (exists) {
+      if (await userIdAlreadyRegistered(userIdKey)) {
+        setError("This user ID is already registered. One entry per person.");
+        return;
+      }
+
+      if (await emailAlreadyRegistered(emailKey, cleanEmail)) {
         setError("This email is already registered. One entry per person.");
-        setSubmitted(true);
-        persistClaim(cleanName, cleanEmail, cleanLeader);
         return;
       }
 
@@ -293,16 +359,19 @@ export default function Register() {
       }
 
       try {
+        // Doc id = userIdKey so the same ID cannot register again on any device
         await runTransaction(db, async (tx) => {
-          const ref = doc(db, "participants", emailKey);
+          const ref = doc(db, "participants", userIdKey);
           const snap = await tx.get(ref);
           if (snap.exists()) {
-            throw new Error("EXISTS");
+            throw new Error("USER_ID_EXISTS");
           }
           tx.set(ref, {
             username: cleanName,
             email: cleanEmail,
             emailKey,
+            userId: cleanUserId,
+            userIdKey,
             leaderName: cleanLeader,
             country: country || "Unknown",
             won: false,
@@ -310,16 +379,14 @@ export default function Register() {
           });
         });
       } catch (err) {
-        if (err?.message === "EXISTS") {
-          setError("This email is already registered. One entry per person.");
-          setSubmitted(true);
-          persistClaim(cleanName, cleanEmail, cleanLeader);
+        if (err?.message === "USER_ID_EXISTS") {
+          setError("This user ID is already registered. One entry per person.");
           return;
         }
         throw err;
       }
 
-      persistClaim(cleanName, cleanEmail, cleanLeader);
+      persistClaim(cleanName, cleanEmail, cleanUserId, cleanLeader);
       setSubmitted(true);
     } catch {
       setError("Could not submit right now. Please try again.");
@@ -345,7 +412,18 @@ export default function Register() {
 
         <form className="ownersForm" onSubmit={handleSubmit}>
           <input
-            placeholder="nickname (shown on the big screen)"
+            placeholder="user ID"
+            value={userId}
+            onChange={(e) => {
+              setUserId(e.target.value);
+              setError("");
+            }}
+            required
+            autoComplete="username"
+            disabled={submitted || loading}
+          />
+          <input
+            placeholder="username (shown on the big screen)"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             required
