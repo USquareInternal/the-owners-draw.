@@ -10,7 +10,6 @@ const INNER_R = 252; // thinner gold rim (ref image)
 const HUB_R = 62;
 const SPIN_MS = 5200;
 const JOIN_URL = "https://nexora-owners-draw.vercel.app/join";
-const PRIZE_POOL = "$1200";
 const COIN_SRCS = [
   "/coins/akasha.png",
   "/coins/assetia.png",
@@ -258,8 +257,20 @@ function CoinSplash({ burstKey }) {
   );
 }
 
+function formatPrizeAmount(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return "";
+  return t.startsWith("$") ? t : `$${t}`;
+}
+
+const PRIZE_TITLES = ["1st Prize", "2nd Prize", "3rd Prize"];
+
 function WinnerPopup({ winner, onClose }) {
   if (!winner) return null;
+
+  const prizeLine = winner.prizeAmount
+    ? `Takes the ${winner.prizeTitle} · ${winner.prizeAmount}`
+    : `Takes the ${winner.prizeTitle}`;
 
   return (
     <div className="winnerOverlay" role="dialog" aria-modal="true" aria-label="Winner">
@@ -270,12 +281,85 @@ function WinnerPopup({ winner, onClose }) {
         {winner.country ? (
           <p className="winnerCountry">{winner.country}</p>
         ) : null}
-        <p className="winnerPrize">Takes the pool · {PRIZE_POOL}</p>
+        <p className="winnerPrize">{prizeLine}</p>
         <button type="button" className="winnerClose" onClick={onClose}>
           Continue
         </button>
       </div>
     </div>
+  );
+}
+
+function PrizeCard({ label, amount, draft, onDraftChange, onConfirm, onEdit }) {
+  if (amount) {
+    return (
+      <aside className="hostCard hostCard--prize">
+        <span className="prizeLabel">{label}</span>
+        <strong className="prizeValue">{amount}</strong>
+        <button type="button" className="prizeEdit" onClick={onEdit}>
+          Edit
+        </button>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="hostCard hostCard--prize">
+      <span className="prizeLabel">{label}</span>
+      <form
+        className="prizeForm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onConfirm();
+        }}
+      >
+        <input
+          className="prizeInput"
+          type="text"
+          inputMode="decimal"
+          placeholder="e.g. 1200"
+          value={draft}
+          onChange={(e) => onDraftChange(e.target.value)}
+          aria-label={`${label} amount`}
+        />
+        <button className="prizeOk" type="submit" disabled={!draft.trim()}>
+          OK
+        </button>
+      </form>
+    </aside>
+  );
+}
+
+const TIMER_SECONDS = 5 * 60;
+
+function formatTimer(totalSeconds) {
+  const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const s = String(totalSeconds % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
+      <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path d="M8 5v14l11-7L8 5z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -287,6 +371,14 @@ export default function Wheel() {
   // Freeze wheel face during spin + popup (state, not ref — survives Strict Mode)
   const [wheelFrozen, setWheelFrozen] = useState(false);
   const [wheelNames, setWheelNames] = useState([]);
+  const [timerStarted, setTimerStarted] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(TIMER_SECONDS);
+  const [prizes, setPrizes] = useState([
+    { id: 1, label: "Prize 1", draft: "", amount: "" },
+    { id: 2, label: "Prize 2", draft: "", amount: "" },
+    { id: 3, label: "Prize 3", draft: "", amount: "" },
+  ]);
   const canvasRef = useRef(null);
   const rotationRef = useRef(0);
   const pendingWinRef = useRef(null);
@@ -311,11 +403,55 @@ export default function Wheel() {
     if (canvasRef.current) drawParticipantWheel(canvasRef.current, wheelNames);
   }, [wheelNames.join("|")]);
 
+  useEffect(() => {
+    if (!timerRunning) return undefined;
+    const id = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          setTimerRunning(false);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [timerRunning]);
+
+  const handleStartTimer = () => {
+    setTimerStarted(true);
+    setSecondsLeft(TIMER_SECONDS);
+    setTimerRunning(true);
+  };
+
+  const handlePauseTimer = () => setTimerRunning(false);
+  const handleResumeTimer = () => {
+    if (secondsLeft <= 0) {
+      setSecondsLeft(TIMER_SECONDS);
+    }
+    setTimerRunning(true);
+  };
+  const handleStopTimer = () => {
+    setTimerRunning(false);
+    setTimerStarted(false);
+    setSecondsLeft(TIMER_SECONDS);
+  };
+
   const handleSpin = () => {
     if (spinning || pool.length < 1 || winner) return;
 
     const spinPool = [...pool];
     const spinNames = spinPool.map(displayName);
+    // 0 = first win → 1st prize, 1 → 2nd, 2 → 3rd
+    const prizeIndex = Math.min(
+      participants.filter((p) => p.won).length,
+      PRIZE_TITLES.length - 1
+    );
+    const prizeMeta = {
+      prizeTitle: PRIZE_TITLES[prizeIndex],
+      prizeAmount: prizes[prizeIndex]?.amount || "",
+      prizeRank: prizeIndex + 1,
+    };
+
     setWheelFrozen(true);
     setWheelNames(spinNames);
     setSpinning(true);
@@ -341,21 +477,27 @@ export default function Wheel() {
     setRotation(next);
 
     const picked = spinPool[winnerIdx];
-    pendingWinRef.current = picked;
+    pendingWinRef.current = { person: picked, prizeMeta };
 
     setTimeout(() => {
-      const person = pendingWinRef.current;
-      if (!person) return;
+      const pending = pendingWinRef.current;
+      if (!pending) return;
+      const { person, prizeMeta: prize } = pending;
       setWinner({
         id: person.id,
         name: displayName(person),
         country: person.country || "",
+        prizeTitle: prize.prizeTitle,
+        prizeAmount: prize.prizeAmount,
       });
       setSpinning(false);
       // Persist after the wheel has visually stopped — do not redraw yet
-      updateDoc(doc(db, "participants", person.id), { won: true }).catch(
-        console.error
-      );
+      updateDoc(doc(db, "participants", person.id), {
+        won: true,
+        prizeRank: prize.prizeRank,
+        prizeTitle: prize.prizeTitle,
+        prizeAmount: prize.prizeAmount,
+      }).catch(console.error);
     }, SPIN_MS);
   };
 
@@ -368,6 +510,36 @@ export default function Wheel() {
       participants
         .filter((p) => !p.won && p.id !== winnerId)
         .map(displayName)
+    );
+  };
+
+  const updatePrizeDraft = (id, draft) => {
+    setPrizes((list) =>
+      list.map((p) => (p.id === id ? { ...p, draft } : p))
+    );
+  };
+
+  const confirmPrize = (id) => {
+    setPrizes((list) =>
+      list.map((p) =>
+        p.id === id
+          ? { ...p, amount: formatPrizeAmount(p.draft), draft: p.draft.trim() }
+          : p
+      )
+    );
+  };
+
+  const editPrize = (id) => {
+    setPrizes((list) =>
+      list.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              draft: p.amount.replace(/^\$/, ""),
+              amount: "",
+            }
+          : p
+      )
     );
   };
 
@@ -395,17 +567,26 @@ export default function Wheel() {
         </ul>
       </aside>
 
-      <aside className="hostCard hostCard--prize">
-        <span className="prizeLabel">Prize pool</span>
-        <strong className="prizeValue">{PRIZE_POOL}</strong>
-      </aside>
+      <div className="hostPrizeColumn">
+        {prizes.map((prize) => (
+          <PrizeCard
+            key={prize.id}
+            label={prize.label}
+            amount={prize.amount}
+            draft={prize.draft}
+            onDraftChange={(v) => updatePrizeDraft(prize.id, v)}
+            onConfirm={() => confirmPrize(prize.id)}
+            onEdit={() => editPrize(prize.id)}
+          />
+        ))}
 
-      <blockquote className="hostQuote">
-        <span className="quoteLabel">From the table</span>
-        <p>
-          &ldquo;The ones who own the table never chase the markets.&rdquo;
-        </p>
-      </blockquote>
+        <blockquote className="hostQuote">
+          <span className="quoteLabel">From the table</span>
+          <p>
+            &ldquo;The ones who own the table never chase the markets.&rdquo;
+          </p>
+        </blockquote>
+      </div>
 
       <aside className="hostCard hostCard--qr">
         <img className="qrCode" src={qrSrc} alt="QR code to enter" />
@@ -459,17 +640,70 @@ export default function Wheel() {
         ) : wheelNames.length === 0 ? (
           <p className="hostTimerHint">Waiting for entries · scan to join</p>
         ) : null}
-      </main>
 
-      <footer className="hostFooter">
-        <span>Connect</span>
-        <span>·</span>
-        <span>Earn</span>
-        <span>·</span>
-        <span>Spend</span>
-        <span>·</span>
-        <span>Own</span>
-      </footer>
+        <div className="hostTimerBar">
+          {!timerStarted ? (
+            <button
+              type="button"
+              className="hostStartBtn"
+              onClick={handleStartTimer}
+            >
+              Start
+            </button>
+          ) : (
+            <>
+              <span
+                className={`hostCountdown ${secondsLeft === 0 ? "is-done" : ""}`}
+              >
+                {formatTimer(secondsLeft)}
+              </span>
+              <div className="hostTimerControls">
+                {timerRunning ? (
+                  <button
+                    type="button"
+                    className="hostTimerIconBtn"
+                    onClick={handlePauseTimer}
+                    aria-label="Pause timer"
+                    title="Pause"
+                  >
+                    <PauseIcon />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="hostTimerIconBtn"
+                    onClick={handleResumeTimer}
+                    aria-label="Resume timer"
+                    title="Start"
+                    disabled={secondsLeft === 0}
+                  >
+                    <PlayIcon />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="hostTimerIconBtn"
+                  onClick={handleStopTimer}
+                  aria-label="Stop timer"
+                  title="Stop"
+                >
+                  <StopIcon />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <footer className="hostFooter">
+          <span>Connect</span>
+          <span>·</span>
+          <span>Earn</span>
+          <span>·</span>
+          <span>Spend</span>
+          <span>·</span>
+          <span>Own</span>
+        </footer>
+      </main>
 
       <WinnerPopup winner={winner} onClose={handleCloseWinner} />
     </div>

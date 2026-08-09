@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { db } from "../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  serverTimestamp,
+  query,
+  where,
+  getDocs,
+  limit,
+  runTransaction,
+} from "firebase/firestore";
+
+const CLAIM_KEY = "owners-draw-claimed";
 
 const DISPLAY_SEGMENTS = [
   "Grow your own",
@@ -164,12 +176,61 @@ async function fetchCountry() {
   return "Unknown";
 }
 
+async function emailAlreadyRegistered(emailKey, cleanEmail) {
+  // New entries use lowercase email as document id
+  const byId = await getDoc(doc(db, "participants", emailKey));
+  if (byId.exists()) return true;
+
+  const byKey = query(
+    collection(db, "participants"),
+    where("emailKey", "==", emailKey),
+    limit(1)
+  );
+  if (!(await getDocs(byKey)).empty) return true;
+
+  // Fallback for older docs that only stored `email`
+  const byExact = query(
+    collection(db, "participants"),
+    where("email", "==", cleanEmail),
+    limit(1)
+  );
+  if (!(await getDocs(byExact)).empty) return true;
+
+  if (cleanEmail !== emailKey) {
+    const byLower = query(
+      collection(db, "participants"),
+      where("email", "==", emailKey),
+      limit(1)
+    );
+    if (!(await getDocs(byLower)).empty) return true;
+  }
+
+  return false;
+}
+
 export default function Register() {
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
+  const [leaderName, setLeaderName] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const countryRef = useRef("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(CLAIM_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data?.email) setEmail(data.email);
+        if (data?.nickname) setNickname(data.nickname);
+        if (data?.leaderName) setLeaderName(data.leaderName);
+        setSubmitted(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Prefetch so submit doesn't wait (and so country is ready)
   useEffect(() => {
@@ -182,26 +243,86 @@ export default function Register() {
     };
   }, []);
 
+  const persistClaim = (cleanName, cleanEmail, cleanLeader) => {
+    try {
+      localStorage.setItem(
+        CLAIM_KEY,
+        JSON.stringify({
+          email: cleanEmail,
+          nickname: cleanName,
+          leaderName: cleanLeader,
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!nickname.trim() || !email.trim() || loading) return;
+    if (
+      !nickname.trim() ||
+      !email.trim() ||
+      !leaderName.trim() ||
+      loading ||
+      submitted
+    ) {
+      return;
+    }
+
+    const cleanName = nickname.trim();
+    const cleanEmail = email.trim();
+    const cleanLeader = leaderName.trim();
+    const emailKey = cleanEmail.toLowerCase();
 
     setLoading(true);
+    setError("");
     try {
+      const exists = await emailAlreadyRegistered(emailKey, cleanEmail);
+      if (exists) {
+        setError("This email is already registered. One entry per person.");
+        setSubmitted(true);
+        persistClaim(cleanName, cleanEmail, cleanLeader);
+        return;
+      }
+
       let country = countryRef.current;
       if (!country) {
         country = await fetchCountry();
         countryRef.current = country;
       }
 
-      await addDoc(collection(db, "participants"), {
-        username: nickname.trim(),
-        email: email.trim(),
-        country: country || "Unknown",
-        won: false,
-        createdAt: serverTimestamp(),
-      });
+      try {
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "participants", emailKey);
+          const snap = await tx.get(ref);
+          if (snap.exists()) {
+            throw new Error("EXISTS");
+          }
+          tx.set(ref, {
+            username: cleanName,
+            email: cleanEmail,
+            emailKey,
+            leaderName: cleanLeader,
+            country: country || "Unknown",
+            won: false,
+            createdAt: serverTimestamp(),
+          });
+        });
+      } catch (err) {
+        if (err?.message === "EXISTS") {
+          setError("This email is already registered. One entry per person.");
+          setSubmitted(true);
+          persistClaim(cleanName, cleanEmail, cleanLeader);
+          return;
+        }
+        throw err;
+      }
+
+      persistClaim(cleanName, cleanEmail, cleanLeader);
       setSubmitted(true);
+    } catch {
+      setError("Could not submit right now. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -230,23 +351,45 @@ export default function Register() {
             onChange={(e) => setNickname(e.target.value)}
             required
             autoComplete="nickname"
-            disabled={submitted}
+            disabled={submitted || loading}
           />
           <input
             type="email"
             placeholder="your email (private, for payout)"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setError("");
+            }}
             required
             autoComplete="email"
-            disabled={submitted}
+            disabled={submitted || loading}
           />
-          <button className="ownersCta" type="submit" disabled={submitted || loading}>
-            <span>{submitted ? "Seat claimed" : loading ? "Claiming…" : "Spin to claim your seat"}</span>
+          <input
+            placeholder="your leader name"
+            value={leaderName}
+            onChange={(e) => setLeaderName(e.target.value)}
+            required
+            autoComplete="organization"
+            disabled={submitted || loading}
+          />
+          <button
+            className="ownersCta"
+            type="submit"
+            disabled={submitted || loading}
+          >
+            <span>
+              {submitted
+                ? "Seat claimed"
+                : loading
+                  ? "Claiming…"
+                  : "Spin to claim your seat"}
+            </span>
           </button>
-          {submitted && (
+          {submitted && !error && (
             <p className="success">You&apos;re in. See you on the call.</p>
           )}
+          {error ? <p className="formError">{error}</p> : null}
         </form>
 
         <p className="ownersDisclaimer">

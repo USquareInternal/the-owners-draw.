@@ -717,6 +717,20 @@ input:focus {
   font-size: 0.8rem;
 }
 
+.ownersForm .formError {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  font-family: var(--font-primary);
+  color: #e8a0a0;
+  text-align: center;
+}
+
+.ownersForm input:disabled,
+.ownersCta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .ownersCta {
   position: relative;
   margin-top: 0.2rem;
@@ -829,6 +843,54 @@ input:focus {
   }
 }
 
+/* —— host pin gate —— */
+.pinGate {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a1f1c;
+  padding: 1rem;
+}
+
+.pinGateForm {
+  width: min(280px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.pinGateInput {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(197, 160, 89, 0.4);
+  background: rgba(8, 28, 24, 0.85);
+  color: #f9f7f2;
+  font-family: "Poppins", sans-serif;
+  font-size: 0.95rem;
+  text-align: center;
+  outline: none;
+}
+
+.pinGateInput::placeholder {
+  color: rgba(249, 247, 242, 0.4);
+}
+
+.pinGateInput:focus {
+  border-color: rgba(197, 160, 89, 0.75);
+}
+
+.pinGateError {
+  margin: 0;
+  text-align: center;
+  font-family: "Poppins", sans-serif;
+  font-size: 0.78rem;
+  color: #e94560;
+}
+
 /* —— /wheel host screen —— */
 .page.wheelHost {
   height: 100vh;
@@ -838,14 +900,13 @@ input:focus {
   overflow: hidden;
   display: grid;
   grid-template-columns: minmax(220px, 280px) 1fr minmax(200px, 260px);
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto;
   grid-template-areas:
-    "draw center prize"
-    "draw center quote"
-    "qr center quote"
-    "footer footer footer";
+    "draw center prizes"
+    "draw center prizes"
+    "qr center prizes";
   gap: 1rem 1.25rem;
-  padding: 1.25rem 1.5rem 0.85rem;
+  padding: 1.25rem 1.5rem 1rem;
   align-items: start;
 }
 
@@ -1022,9 +1083,31 @@ input:focus {
   border: none !important;
 }
 
+.hostPrizeColumn {
+  grid-area: prizes;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-self: start;
+  width: 100%;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-right: 2px;
+}
+
+.hostPrizeColumn::-webkit-scrollbar {
+  width: 0;
+  display: none;
+}
+
 .hostCard--prize {
-  grid-area: prize;
   text-align: left;
+  padding: 0.85rem 1rem;
 }
 
 .prizeLabel {
@@ -1039,21 +1122,89 @@ input:focus {
 }
 
 .prizeValue {
+  display: block;
   font-family: var(--font-stats);
-  font-size: clamp(2rem, 4vw, 2.6rem);
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
   font-weight: 700;
   background: linear-gradient(180deg, #fff3c9, #c5a059 55%, #9a7840);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  line-height: 1;
+  line-height: 1.1;
+}
+
+.prizeForm {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.prizeInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(197, 160, 89, 0.35);
+  background: rgba(8, 28, 24, 0.65);
+  color: var(--cream);
+  font-family: var(--font-stats);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.prizeInput::placeholder {
+  color: rgba(249, 247, 242, 0.35);
+  font-family: var(--font-primary);
+  font-size: 0.8rem;
+}
+
+.prizeInput:focus {
+  border-color: rgba(224, 196, 122, 0.7);
+  box-shadow: 0 0 0 2px rgba(197, 160, 89, 0.15);
+}
+
+.prizeOk {
+  flex-shrink: 0;
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #e0c47a, #c5a059 60%, #a68542);
+  color: #1a1408;
+  font-family: var(--font-primary);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.prizeOk:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.prizeEdit {
+  margin-top: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(197, 160, 89, 0.7);
+  font-family: var(--font-primary);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.prizeEdit:hover {
+  color: var(--golden-primary);
 }
 
 .hostQuote {
-  grid-area: quote;
   position: relative;
   z-index: 1;
-  margin: 0.5rem 0 0;
+  margin: 0.25rem 0 0;
   padding: 0 0.25rem;
   text-align: left;
   border: none;
@@ -1130,9 +1281,22 @@ input:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
+  max-height: calc(100vh - 2.5rem);
   align-self: stretch;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.5rem 1.25rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hostCenter::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .hostHeader {
@@ -1283,6 +1447,92 @@ input:focus {
   color: rgba(249, 247, 242, 0.65);
 }
 
+.hostTimerBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  min-height: 3.25rem;
+  flex-shrink: 0;
+}
+
+.hostStartBtn {
+  padding: 0.7rem 2.4rem;
+  border: 1px solid rgba(255, 236, 190, 0.45);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, #f3dfa0 0%, #d4b56a 30%, #c5a059 65%, #a68542 100%);
+  color: #1a1408;
+  font-family: var(--font-primary);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 10px 28px rgba(197, 160, 89, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hostStartBtn:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 14px 32px rgba(197, 160, 89, 0.45);
+}
+
+.hostCountdown {
+  font-family: var(--font-stats);
+  font-weight: 700;
+  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  background: linear-gradient(180deg, #fff3c9 0%, #c5a059 55%, #9a7840 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 12px rgba(197, 160, 89, 0.35));
+}
+
+.hostCountdown.is-done {
+  opacity: 0.55;
+}
+
+.hostTimerControls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hostTimerIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(197, 160, 89, 0.45);
+  background: rgba(8, 28, 24, 0.55);
+  color: var(--golden-primary);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.hostTimerIconBtn:hover:not(:disabled) {
+  background: rgba(197, 160, 89, 0.15);
+  border-color: rgba(224, 196, 122, 0.75);
+  transform: scale(1.05);
+}
+
+.hostTimerIconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Winner popup + coin splash */
 .winnerOverlay {
   position: fixed;
@@ -1430,20 +1680,22 @@ input:focus {
 }
 
 .hostFooter {
-  grid-area: footer;
   position: relative;
   z-index: 1;
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.65rem;
-  padding: 0.35rem 0 0.15rem;
+  margin-top: 1.75rem;
+  padding: 0.5rem 0 1.25rem;
   font-family: var(--font-primary);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(249, 247, 242, 0.45);
+  flex-shrink: 0;
 }
 
 @media (max-width: 960px) {
@@ -1452,15 +1704,18 @@ input:focus {
     grid-template-rows: auto;
     grid-template-areas:
       "center"
-      "prize"
+      "prizes"
       "draw"
-      "qr"
-      "quote"
-      "footer";
+      "qr";
     height: auto;
     max-height: none;
     overflow: auto;
     padding: 1rem;
+  }
+
+  .hostCenter {
+    max-height: none;
+    overflow: visible;
   }
 
   .hostCard--draw {
