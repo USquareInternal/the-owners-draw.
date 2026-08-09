@@ -9,7 +9,7 @@ const OUTER_R = 268;
 const INNER_R = 252; // thinner gold rim (ref image)
 const HUB_R = 62;
 const SPIN_MS = 5200;
-const JOIN_URL = "https://nexora-owners-draw.vercel.app/join";
+const JOIN_URL = "https://the-architect-table.vercel.app/join";
 const COIN_SRCS = [
   "/coins/akasha.png",
   "/coins/assetia.png",
