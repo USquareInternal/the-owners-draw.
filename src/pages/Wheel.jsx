@@ -331,7 +331,7 @@ function PrizeCard({ label, amount, draft, onDraftChange, onConfirm, onEdit }) {
 }
 
 const TIMER_SECONDS = 5 * 60;
-const TIMER_AUDIO_SRC = "/audio/timer-countdown.mp3";
+const TIMER_AUDIO_SRC = "/audio/5c3a-beea-4883-8bee-e71e527a85df.mp3";
 
 function formatTimer(totalSeconds) {
   const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
