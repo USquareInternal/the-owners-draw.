@@ -331,6 +331,7 @@ function PrizeCard({ label, amount, draft, onDraftChange, onConfirm, onEdit }) {
 }
 
 const TIMER_SECONDS = 5 * 60;
+const TIMER_AUDIO_SRC = "/audio/timer-countdown.mp3";
 
 function formatTimer(totalSeconds) {
   const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -382,6 +383,43 @@ export default function Wheel() {
   const canvasRef = useRef(null);
   const rotationRef = useRef(0);
   const pendingWinRef = useRef(null);
+  const timerAudioRef = useRef(null);
+
+  useEffect(() => {
+    const audio = new Audio(TIMER_AUDIO_SRC);
+    audio.preload = "auto";
+    audio.loop = false;
+    timerAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = "";
+      timerAudioRef.current = null;
+    };
+  }, []);
+
+  const playTimerAudio = () => {
+    const audio = timerAudioRef.current;
+    if (!audio) return;
+    const start = async () => {
+      try {
+        await audio.play();
+      } catch {
+        /* autoplay / missing file — ignore */
+      }
+    };
+    start();
+  };
+
+  const pauseTimerAudio = () => {
+    timerAudioRef.current?.pause();
+  };
+
+  const stopTimerAudio = () => {
+    const audio = timerAudioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+  };
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "participants"), (snap) => {
@@ -392,6 +430,24 @@ export default function Wheel() {
 
   const pool = participants.filter((p) => !p.won);
   const liveNames = pool.map(displayName);
+
+  const leaders = useMemo(() => {
+    const counts = new Map();
+    for (const p of participants) {
+      const raw = String(p.leaderName || "").trim();
+      if (!raw) continue;
+      const key = raw.toLowerCase();
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, { name: raw, count: 1 });
+      }
+    }
+    return [...counts.values()].sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+    );
+  }, [participants]);
 
   useEffect(() => {
     if (!wheelFrozen) {
@@ -409,6 +465,7 @@ export default function Wheel() {
       setSecondsLeft((s) => {
         if (s <= 1) {
           setTimerRunning(false);
+          stopTimerAudio();
           return 0;
         }
         return s - 1;
@@ -421,19 +478,27 @@ export default function Wheel() {
     setTimerStarted(true);
     setSecondsLeft(TIMER_SECONDS);
     setTimerRunning(true);
+    stopTimerAudio();
+    playTimerAudio();
   };
 
-  const handlePauseTimer = () => setTimerRunning(false);
+  const handlePauseTimer = () => {
+    setTimerRunning(false);
+    pauseTimerAudio();
+  };
   const handleResumeTimer = () => {
     if (secondsLeft <= 0) {
       setSecondsLeft(TIMER_SECONDS);
+      stopTimerAudio();
     }
     setTimerRunning(true);
+    playTimerAudio();
   };
   const handleStopTimer = () => {
     setTimerRunning(false);
     setTimerStarted(false);
     setSecondsLeft(TIMER_SECONDS);
+    stopTimerAudio();
   };
 
   const handleSpin = () => {
@@ -580,12 +645,23 @@ export default function Wheel() {
           />
         ))}
 
-        <blockquote className="hostQuote">
-          <span className="quoteLabel">From the table</span>
-          <p>
-            &ldquo;The ones who own the table never chase the markets.&rdquo;
-          </p>
-        </blockquote>
+        <aside className="hostCard hostCard--leaders">
+          <div className="hostCardHead">
+            <span>Leaders list</span>
+            <strong>{leaders.length}</strong>
+          </div>
+          <ul className="drawList leadersList">
+            {leaders.length === 0 && (
+              <li className="drawEmpty">Waiting for leaders…</li>
+            )}
+            {leaders.map((leader) => (
+              <li key={leader.name.toLowerCase()}>
+                <span className="drawName">{leader.name}</span>
+                <span className="leaderCount">{leader.count}</span>
+              </li>
+            ))}
+          </ul>
+        </aside>
       </div>
 
       <aside className="hostCard hostCard--qr">
