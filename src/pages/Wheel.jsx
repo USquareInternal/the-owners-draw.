@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
 
 const SIZE = 560;
 const CX = SIZE / 2;
@@ -330,8 +330,21 @@ function PrizeCard({ label, amount, draft, onDraftChange, onConfirm, onEdit }) {
   );
 }
 
-const TIMER_SECONDS = 5 * 60;
+const TIMER_SECONDS = 3 * 60;
 const TIMER_AUDIO_SRC = "/audio/5c3a-beea-4883-8bee-e71e527a85df.mp3";
+const EVENT_CONFIG_REF = () => doc(db, "event", "config");
+
+async function setRegistrationOpen(open) {
+  try {
+    await setDoc(
+      EVENT_CONFIG_REF(),
+      { registrationOpen: open },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 function formatTimer(totalSeconds) {
   const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -428,6 +441,11 @@ export default function Wheel() {
     return unsub;
   }, []);
 
+  // Registration stays closed until this host session starts the timer
+  useEffect(() => {
+    setRegistrationOpen(false);
+  }, []);
+
   const pool = participants.filter((p) => !p.won);
   const liveNames = pool.map(displayName);
 
@@ -480,6 +498,7 @@ export default function Wheel() {
     setTimerRunning(true);
     stopTimerAudio();
     playTimerAudio();
+    setRegistrationOpen(true);
   };
 
   const handlePauseTimer = () => {
@@ -499,6 +518,7 @@ export default function Wheel() {
     setTimerStarted(false);
     setSecondsLeft(TIMER_SECONDS);
     stopTimerAudio();
+    setRegistrationOpen(false);
   };
 
   const handleSpin = () => {
