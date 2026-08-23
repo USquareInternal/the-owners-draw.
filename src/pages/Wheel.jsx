@@ -506,11 +506,12 @@ export default function Wheel() {
 
     const spinPool = [...pool];
     const spinNames = spinPool.map(displayName);
-    // 0 = first win → 1st prize, 1 → 2nd, 2 → 3rd
-    const prizeIndex = Math.min(
+    // Reverse order: 1st spin → 3rd prize, 2nd → 2nd, 3rd → 1st
+    const winOrder = Math.min(
       participants.filter((p) => p.won).length,
       PRIZE_TITLES.length - 1
     );
+    const prizeIndex = PRIZE_TITLES.length - 1 - winOrder;
     const prizeMeta = {
       prizeTitle: PRIZE_TITLES[prizeIndex],
       prizeAmount: prizes[prizeIndex]?.amount || "",
