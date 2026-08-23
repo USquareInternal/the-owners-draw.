@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 
 const SIZE = 560;
 const CX = SIZE / 2;
@@ -330,53 +330,6 @@ function PrizeCard({ label, amount, draft, onDraftChange, onConfirm, onEdit }) {
   );
 }
 
-const TIMER_SECONDS = 3 * 60;
-const TIMER_AUDIO_SRC = "/audio/5c3a-beea-4883-8bee-e71e527a85df.mp3";
-const EVENT_CONFIG_REF = () => doc(db, "event", "config");
-
-async function setRegistrationOpen(open) {
-  try {
-    await setDoc(
-      EVENT_CONFIG_REF(),
-      { registrationOpen: open },
-      { merge: true }
-    );
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-function formatTimer(totalSeconds) {
-  const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const s = String(totalSeconds % 60).padStart(2, "0");
-  return `${m}:${s}`;
-}
-
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
-      <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
-    </svg>
-  );
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <path d="M8 5v14l11-7L8 5z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function StopIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
-    </svg>
-  );
-}
-
 export default function Wheel() {
   const [participants, setParticipants] = useState([]);
   const [spinning, setSpinning] = useState(false);
@@ -385,9 +338,6 @@ export default function Wheel() {
   // Freeze wheel face during spin + popup (state, not ref — survives Strict Mode)
   const [wheelFrozen, setWheelFrozen] = useState(false);
   const [wheelNames, setWheelNames] = useState([]);
-  const [timerStarted, setTimerStarted] = useState(false);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(TIMER_SECONDS);
   const [prizes, setPrizes] = useState([
     { id: 1, label: "Prize 1", draft: "", amount: "" },
     { id: 2, label: "Prize 2", draft: "", amount: "" },
@@ -396,54 +346,12 @@ export default function Wheel() {
   const canvasRef = useRef(null);
   const rotationRef = useRef(0);
   const pendingWinRef = useRef(null);
-  const timerAudioRef = useRef(null);
-
-  useEffect(() => {
-    const audio = new Audio(TIMER_AUDIO_SRC);
-    audio.preload = "auto";
-    audio.loop = false;
-    timerAudioRef.current = audio;
-    return () => {
-      audio.pause();
-      audio.src = "";
-      timerAudioRef.current = null;
-    };
-  }, []);
-
-  const playTimerAudio = () => {
-    const audio = timerAudioRef.current;
-    if (!audio) return;
-    const start = async () => {
-      try {
-        await audio.play();
-      } catch {
-        /* autoplay / missing file — ignore */
-      }
-    };
-    start();
-  };
-
-  const pauseTimerAudio = () => {
-    timerAudioRef.current?.pause();
-  };
-
-  const stopTimerAudio = () => {
-    const audio = timerAudioRef.current;
-    if (!audio) return;
-    audio.pause();
-    audio.currentTime = 0;
-  };
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "participants"), (snap) => {
       setParticipants(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
     return unsub;
-  }, []);
-
-  // Registration stays closed until this host session starts the timer
-  useEffect(() => {
-    setRegistrationOpen(false);
   }, []);
 
   const pool = participants.filter((p) => !p.won);
@@ -476,50 +384,6 @@ export default function Wheel() {
   useEffect(() => {
     if (canvasRef.current) drawParticipantWheel(canvasRef.current, wheelNames);
   }, [wheelNames.join("|")]);
-
-  useEffect(() => {
-    if (!timerRunning) return undefined;
-    const id = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          setTimerRunning(false);
-          stopTimerAudio();
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [timerRunning]);
-
-  const handleStartTimer = () => {
-    setTimerStarted(true);
-    setSecondsLeft(TIMER_SECONDS);
-    setTimerRunning(true);
-    stopTimerAudio();
-    playTimerAudio();
-    setRegistrationOpen(true);
-  };
-
-  const handlePauseTimer = () => {
-    setTimerRunning(false);
-    pauseTimerAudio();
-  };
-  const handleResumeTimer = () => {
-    if (secondsLeft <= 0) {
-      setSecondsLeft(TIMER_SECONDS);
-      stopTimerAudio();
-    }
-    setTimerRunning(true);
-    playTimerAudio();
-  };
-  const handleStopTimer = () => {
-    setTimerRunning(false);
-    setTimerStarted(false);
-    setSecondsLeft(TIMER_SECONDS);
-    stopTimerAudio();
-    setRegistrationOpen(false);
-  };
 
   const handleSpin = () => {
     if (spinning || pool.length < 1 || winner) return;
@@ -737,59 +601,6 @@ export default function Wheel() {
         ) : wheelNames.length === 0 ? (
           <p className="hostTimerHint">Waiting for entries · scan to join</p>
         ) : null}
-
-        <div className="hostTimerBar">
-          {!timerStarted ? (
-            <button
-              type="button"
-              className="hostStartBtn"
-              onClick={handleStartTimer}
-            >
-              Start
-            </button>
-          ) : (
-            <>
-              <span
-                className={`hostCountdown ${secondsLeft === 0 ? "is-done" : ""}`}
-              >
-                {formatTimer(secondsLeft)}
-              </span>
-              <div className="hostTimerControls">
-                {timerRunning ? (
-                  <button
-                    type="button"
-                    className="hostTimerIconBtn"
-                    onClick={handlePauseTimer}
-                    aria-label="Pause timer"
-                    title="Pause"
-                  >
-                    <PauseIcon />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="hostTimerIconBtn"
-                    onClick={handleResumeTimer}
-                    aria-label="Resume timer"
-                    title="Start"
-                    disabled={secondsLeft === 0}
-                  >
-                    <PlayIcon />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="hostTimerIconBtn"
-                  onClick={handleStopTimer}
-                  aria-label="Stop timer"
-                  title="Stop"
-                >
-                  <StopIcon />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
 
         <footer className="hostFooter">
           <span>Connect</span>

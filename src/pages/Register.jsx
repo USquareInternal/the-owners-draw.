@@ -10,11 +10,9 @@ import {
   getDocs,
   limit,
   runTransaction,
-  onSnapshot,
 } from "firebase/firestore";
 
 const CLAIM_KEY = "owners-draw-claimed";
-const EVENT_CONFIG_DOC = () => doc(db, "event", "config");
 
 const DISPLAY_SEGMENTS = [
   "Grow your own",
@@ -232,15 +230,7 @@ export default function Register() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [registrationOpen, setRegistrationOpen] = useState(false);
   const countryRef = useRef("");
-
-  useEffect(() => {
-    const unsub = onSnapshot(EVENT_CONFIG_DOC(), (snap) => {
-      setRegistrationOpen(Boolean(snap.data()?.registrationOpen));
-    });
-    return unsub;
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -332,8 +322,7 @@ export default function Register() {
       !userId.trim() ||
       !leaderName.trim() ||
       loading ||
-      submitted ||
-      !registrationOpen
+      submitted
     ) {
       return;
     }
@@ -353,14 +342,6 @@ export default function Register() {
     setLoading(true);
     setError("");
     try {
-      // Re-check live flag in case the host stopped while the form was open
-      const configSnap = await getDoc(EVENT_CONFIG_DOC());
-      if (!configSnap.data()?.registrationOpen) {
-        setRegistrationOpen(false);
-        setError("Registration opens when the host starts the timer.");
-        return;
-      }
-
       if (await userIdAlreadyRegistered(userIdKey)) {
         setError("This user ID is already registered. One entry per person.");
         return;
@@ -439,7 +420,7 @@ export default function Register() {
             }}
             required
             autoComplete="username"
-            disabled={submitted || loading || !registrationOpen}
+            disabled={submitted || loading}
           />
           <input
             placeholder="username (shown on the big screen)"
@@ -447,7 +428,7 @@ export default function Register() {
             onChange={(e) => setNickname(e.target.value)}
             required
             autoComplete="nickname"
-            disabled={submitted || loading || !registrationOpen}
+            disabled={submitted || loading}
           />
           <input
             type="email"
@@ -459,7 +440,7 @@ export default function Register() {
             }}
             required
             autoComplete="email"
-            disabled={submitted || loading || !registrationOpen}
+            disabled={submitted || loading}
           />
           <input
             placeholder="your leader name"
@@ -467,28 +448,21 @@ export default function Register() {
             onChange={(e) => setLeaderName(e.target.value)}
             required
             autoComplete="organization"
-            disabled={submitted || loading || !registrationOpen}
+            disabled={submitted || loading}
           />
           <button
             className="ownersCta"
             type="submit"
-            disabled={submitted || loading || !registrationOpen}
+            disabled={submitted || loading}
           >
             <span>
               {submitted
                 ? "Seat claimed"
-                : !registrationOpen
-                  ? "Waiting for host…"
-                  : loading
-                    ? "Claiming…"
-                    : "Spin to claim your seat"}
+                : loading
+                  ? "Claiming…"
+                  : "Spin to claim your seat"}
             </span>
           </button>
-          {!submitted && !registrationOpen && (
-            <p className="formError">
-              Registration opens when the host starts the timer.
-            </p>
-          )}
           {submitted && !error && (
             <p className="success">You&apos;re in. See you on the call.</p>
           )}
