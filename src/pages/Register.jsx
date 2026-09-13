@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { db } from "../firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const CLAIM_KEY = "owners-draw-claimed";
 
@@ -170,19 +170,8 @@ function normalizeUserId(value) {
   return value.trim().toLowerCase().replace(/\//g, "_");
 }
 
-function participantRef(id) {
-  return doc(db, "participants", id);
-}
-
 async function userIdAlreadyRegistered(userIdKey) {
-  const snap = await getDoc(participantRef(userIdKey));
-  return snap.exists();
-}
-
-async function emailAlreadyRegistered(emailKey) {
-  // Legacy entries used the email as the document id
-  if (!emailKey) return false;
-  const snap = await getDoc(participantRef(emailKey));
+  const snap = await getDoc(doc(db, "participants", userIdKey));
   return snap.exists();
 }
 
@@ -217,13 +206,6 @@ export default function Register() {
         if (data?.userId) {
           stillRegistered = await userIdAlreadyRegistered(
             normalizeUserId(data.userId)
-          );
-        }
-        if (!stillRegistered && data?.email) {
-          const cleanEmail = String(data.email).trim();
-          stillRegistered = await emailAlreadyRegistered(
-            cleanEmail.toLowerCase(),
-            cleanEmail
           );
         }
 
@@ -306,13 +288,9 @@ export default function Register() {
     setLoading(true);
     setError("");
     try {
-      if (await userIdAlreadyRegistered(userIdKey)) {
+      const existing = await getDoc(doc(db, "participants", userIdKey));
+      if (existing.exists()) {
         setError("This user ID is already registered. One entry per person.");
-        return;
-      }
-
-      if (await emailAlreadyRegistered(emailKey, cleanEmail)) {
-        setError("This email is already registered. One entry per person.");
         return;
       }
 
@@ -322,38 +300,29 @@ export default function Register() {
         countryRef.current = country;
       }
 
-      try {
-        // Doc id = userIdKey so the same ID cannot register again on any device
-        await runTransaction(db, async (tx) => {
-          const ref = doc(db, "participants", userIdKey);
-          const snap = await tx.get(ref);
-          if (snap.exists()) {
-            throw new Error("USER_ID_EXISTS");
-          }
-          tx.set(ref, {
-            username: cleanName,
-            email: cleanEmail,
-            emailKey,
-            userId: cleanUserId,
-            userIdKey,
-            leaderName: cleanLeader,
-            country: country || "Unknown",
-            won: false,
-            createdAt: serverTimestamp(),
-          });
-        });
-      } catch (err) {
-        if (err?.message === "USER_ID_EXISTS") {
-          setError("This user ID is already registered. One entry per person.");
-          return;
-        }
-        throw err;
-      }
+      await setDoc(doc(db, "participants", userIdKey), {
+        username: cleanName,
+        email: cleanEmail,
+        emailKey,
+        userId: cleanUserId,
+        userIdKey,
+        leaderName: cleanLeader,
+        country: country || "Unknown",
+        won: false,
+        createdAt: serverTimestamp(),
+      });
 
       persistClaim(cleanName, cleanEmail, cleanUserId, cleanLeader);
       setSubmitted(true);
-    } catch {
-      setError("Could not submit right now. Please try again.");
+    } catch (err) {
+      const code = err?.code || "";
+      if (code === "permission-denied") {
+        setError("Could not submit right now. Please try again.");
+      } else if (code === "already-exists") {
+        setError("This user ID is already registered. One entry per person.");
+      } else {
+        setError("Could not submit right now. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
