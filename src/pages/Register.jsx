@@ -1,16 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { db } from "../firebase";
-import {
-  collection,
-  doc,
-  getDoc,
-  serverTimestamp,
-  query,
-  where,
-  getDocs,
-  limit,
-  runTransaction,
-} from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 const CLAIM_KEY = "owners-draw-claimed";
 
@@ -177,49 +167,23 @@ async function fetchCountry() {
 }
 
 function normalizeUserId(value) {
-  return value.trim().toLowerCase();
+  return value.trim().toLowerCase().replace(/\//g, "_");
+}
+
+function participantRef(id) {
+  return doc(db, "participants", id);
 }
 
 async function userIdAlreadyRegistered(userIdKey) {
-  // Document id is the normalized user ID (cross-device uniqueness)
-  const byId = await getDoc(doc(db, "participants", userIdKey));
-  if (byId.exists()) return true;
-
-  const byKey = query(
-    collection(db, "participants"),
-    where("userIdKey", "==", userIdKey),
-    limit(1)
-  );
-  return !(await getDocs(byKey)).empty;
+  const snap = await getDoc(participantRef(userIdKey));
+  return snap.exists();
 }
 
-async function emailAlreadyRegistered(emailKey, cleanEmail) {
-  const byKey = query(
-    collection(db, "participants"),
-    where("emailKey", "==", emailKey),
-    limit(1)
-  );
-  if (!(await getDocs(byKey)).empty) return true;
-
-  const byExact = query(
-    collection(db, "participants"),
-    where("email", "==", cleanEmail),
-    limit(1)
-  );
-  if (!(await getDocs(byExact)).empty) return true;
-
-  if (cleanEmail !== emailKey) {
-    const byLower = query(
-      collection(db, "participants"),
-      where("email", "==", emailKey),
-      limit(1)
-    );
-    if (!(await getDocs(byLower)).empty) return true;
-  }
-
-  // Legacy docs used email as document id
-  const byId = await getDoc(doc(db, "participants", emailKey));
-  return byId.exists();
+async function emailAlreadyRegistered(emailKey) {
+  // Legacy entries used the email as the document id
+  if (!emailKey) return false;
+  const snap = await getDoc(participantRef(emailKey));
+  return snap.exists();
 }
 
 export default function Register() {
