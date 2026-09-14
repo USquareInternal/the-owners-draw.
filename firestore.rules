@@ -1,14 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /event/config {
-      allow read: if true;
-    }
     match /participants/{id} {
-      allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['name','email','team'])
-                    && id == request.resource.id;
-      allow update, delete: if false;
+      allow read, write: if true;
+    }
+    match /event/{id} {
+      allow read, write: if true;
     }
   }
 }
