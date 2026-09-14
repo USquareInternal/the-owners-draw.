@@ -288,16 +288,24 @@ export default function Register() {
     setLoading(true);
     setError("");
     try {
-      const existing = await getDoc(doc(db, "participants", userIdKey));
-      if (existing.exists()) {
-        setError("This user ID is already registered. One entry per person.");
-        return;
+      try {
+        const existing = await getDoc(doc(db, "participants", userIdKey));
+        if (existing.exists()) {
+          setError("This user ID is already registered. One entry per person.");
+          return;
+        }
+      } catch {
+        // Empty/locked reads should not block a new write
       }
 
-      let country = countryRef.current;
-      if (!country) {
-        country = await fetchCountry();
-        countryRef.current = country;
+      let country = countryRef.current || "Unknown";
+      try {
+        if (!countryRef.current) {
+          country = await fetchCountry();
+          countryRef.current = country;
+        }
+      } catch {
+        country = "Unknown";
       }
 
       await setDoc(doc(db, "participants", userIdKey), {
@@ -315,13 +323,20 @@ export default function Register() {
       persistClaim(cleanName, cleanEmail, cleanUserId, cleanLeader);
       setSubmitted(true);
     } catch (err) {
+      console.error("Registration failed", err);
       const code = err?.code || "";
-      if (code === "permission-denied") {
-        setError("Could not submit right now. Please try again.");
-      } else if (code === "already-exists") {
+      if (code === "already-exists") {
         setError("This user ID is already registered. One entry per person.");
+      } else if (code === "permission-denied") {
+        setError(
+          "Firestore is blocking new entries. In Firebase Console → Firestore → Rules, publish allow read, write on /participants/{id}."
+        );
       } else {
-        setError("Could not submit right now. Please try again.");
+        setError(
+          err?.message
+            ? `Could not submit: ${err.message}`
+            : "Could not submit right now. Please try again."
+        );
       }
     } finally {
       setLoading(false);

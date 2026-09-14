@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -13,8 +13,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  ignoreUndefinedProperties: true,
-});
-export const analytics =
-  typeof window !== "undefined" ? getAnalytics(app) : undefined;
+export const db = getFirestore(app);
+
+let analytics;
+try {
+  analytics = typeof window !== "undefined" ? getAnalytics(app) : undefined;
+} catch {
+  analytics = undefined;
+}
+export { analytics };
